@@ -1,0 +1,14 @@
+black
+datasets
+evaluate
+huggingface_hub[inference]
+isort
+loguru
+orjson
+peft
+pre-commit
+pyext
+pylint
+transformers
+tqdm
+vllm
