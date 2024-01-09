@@ -2,6 +2,7 @@
 LLM Code Evaluation
 """
 import argparse
+import copy
 import os
 import shutil
 import time
@@ -116,9 +117,11 @@ def dict_to_str(x) -> str:
 
 def main(args):
     tasks: Dict[str, Task] = get_tasks(args)
-    task_generations = {"config": vars(args)}
-    task_metrics = {"config": vars(args)}
-    task_logs = {"config": vars(args)}
+
+    args_dict = copy.deepcopy(vars(args))
+    task_generations = {"config": args_dict}
+    task_metrics = {"config": args_dict}
+    task_logs = {"config": args_dict}
 
     if args.save_dir:
         args.generation_path = os.path.join(args.save_dir, "generations.json")
@@ -158,6 +161,10 @@ def main(args):
                 f.write(dict_to_str(task_generations))
                 logger.info(f"generation saved at: {args.generation_path}")
 
+        if args.peft_model:
+            logger.info(f"Remove the PEFT-merged cache: {model_cache_dir}")
+            shutil.rmtree(model_cache_dir)
+
     if not args.generation_only:
         for task_name, task in tasks.items():
             generations = task_generations[task_name]
@@ -181,10 +188,6 @@ def main(args):
                 logger.info(f">> evaluation logs saved at: {args.metric_path}")
 
     logger.info(dict_to_str(task_metrics))
-
-    if args.peft_model:
-        logger.info(f"Remove the PEFT-merged cache: {model_cache_dir}")
-        shutil.rmtree(model_cache_dir)
 
 
 if __name__ == "__main__":
