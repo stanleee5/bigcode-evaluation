@@ -168,7 +168,12 @@ class HumanEvalPack(Task):
             else:
                 inp = instruction + "\n" + context
 
-        prompt = self.instruction_template + inp + self.response_template + prompt_base
+        prompt = (
+            self.instruction_template
+            + inp.strip()
+            + self.response_template
+            + prompt_base
+        )
         # Strip off the final \n to make the tokens more natural
         # Essentially, we want to make sure that if there was no distinction between
         # input & output, the tokens would be the same
