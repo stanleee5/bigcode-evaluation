@@ -37,20 +37,14 @@ class Task(ABC):
         pass
 
     @abstractmethod
-    def get_prompt(
-        self,
-        doc: Dict[str, str],
-        strip_prompt: bool,
-        instruction_template: str,
-        response_template: str,
-    ) -> str:
+    def get_prompt(self, doc: Dict[str, str]) -> str:
         """Builds the prompt for the LM to generate from.
         :param doc: sample from the test dataset
         """
         pass
 
     @abstractmethod
-    def get_reference(self, doc) -> str:
+    def get_reference(self, doc: Dict[str, str]) -> str:
         """Builds the reference solution for the doc.
         :param doc: sample from the test dataset
         """
