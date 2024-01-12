@@ -2,18 +2,19 @@
 LLM Code Evaluation
 """
 import argparse
+import asyncio
 import copy
 import os
 import shutil
 import time
-import uuid
 from typing import Dict, List, Tuple
 
 import orjson
+import ray
+import torch
 from loguru import logger
 
 from bigeval.generator import VllmGenerator
-from bigeval.merge_peft import merge_peft_and_save
 from bigeval.prompt_template import PROMPT_TEMPLATES
 from bigeval.task import Task
 from bigeval.tasks import ALL_TASKS
@@ -38,19 +39,20 @@ def parse_args():
     parser.add_argument("--max-samples", type=int, default=None, help="for debugging")
 
     # LLM
+    parser.add_argument("-f", "--framework", type=str, default="vllm")
     parser.add_argument("-m", "--model")
+    parser.add_argument("-a", "--adapter")
     parser.add_argument("--dtype", default="float16")
     parser.add_argument("-tp", "--tensor-parallel-size", default=1, type=int)
     parser.add_argument("--quantization", default=None)
     parser.add_argument("--gpu-memory-utilization", default=0.95, type=float)
     parser.add_argument("--swap-space", default=16, type=int)
-    parser.add_argument("--peft-model", action="store_true")
     parser.add_argument("--model-cache", default="./merged_models")
 
     # Generation
     parser.add_argument("--do-sample", action="store_true")
     parser.add_argument("--temperature", default=0.2, type=float)
-    parser.add_argument("--top-k", default=-1, type=int)
+    parser.add_argument("--top-k", default=None, type=int)
     parser.add_argument("--top-p", default=0.95, type=float)
     parser.add_argument("--n-samples", default=1, type=int)
     parser.add_argument("--max-tokens", default=512, type=int)
@@ -60,9 +62,11 @@ def parse_args():
     parser.add_argument("--instruction-template", default="[INST]\n")
     parser.add_argument("--response-template", default="\n[/INST]\n")
     parser.add_argument("--template", default=None)
-    parser.add_argument("--num-workers", default=16, type=int)
+    parser.add_argument("--num-workers", default=4, type=int)
 
     args = parser.parse_args()
+    assert args.model or args.adapter
+
     for k, v in vars(args).items():
         v_str = f"'{v}'" if isinstance(v, str) else str(v)
         logger.info(f"{k} = {v_str}")
@@ -115,7 +119,7 @@ def dict_to_str(x) -> str:
     ).decode("utf-8")
 
 
-def main(args):
+async def main(args):
     tasks: Dict[str, Task] = get_tasks(args)
 
     args_dict = copy.deepcopy(vars(args))
@@ -137,19 +141,15 @@ def main(args):
             logger.info(f">> loaded tasks: {list(task_generations.keys())}")
 
     if not args.evaluation_only:
-        if args.peft_model:
-            # save peft model to random cahce dir
-            model_cache_dir = os.path.join(args.model_cache, str(uuid.uuid4())[:16])
-            logger.info(f"Merge the PEFT model and save to: {model_cache_dir}")
-            merge_peft_and_save(args.model, args.dtype, model_cache_dir)
-            args.model = model_cache_dir
-
-        generator = VllmGenerator(args)
+        if args.framework == "vllm":
+            generator = VllmGenerator(args)
+        else:
+            raise NotImplementedError(f"{args.framework}")
 
         for task_name, task in tasks.items():
             logger.info(f"Generation: {task_name = }")
             start_time = time.perf_counter()
-            generations: List[List[str]] = generator.generate_task(
+            generations: List[List[str]] = await generator.generate_task(
                 task, max_samples=args.max_samples
             )
             elapsed = time.perf_counter() - start_time
@@ -161,9 +161,11 @@ def main(args):
                 f.write(dict_to_str(task_generations))
                 logger.info(f"generation saved at: {args.generation_path}")
 
-        if args.peft_model:
-            logger.info(f"Remove the PEFT-merged cache: {model_cache_dir}")
-            shutil.rmtree(model_cache_dir)
+        # Free GPU-memory / Ray workers
+        generator.close()
+        del generator
+        torch.cuda.empty_cache()
+        ray.shutdown()
 
     if not args.generation_only:
         for task_name, task in tasks.items():
@@ -192,4 +194,4 @@ def main(args):
 
 if __name__ == "__main__":
     args = parse_args()
-    main(args)
+    asyncio.run(main(args))

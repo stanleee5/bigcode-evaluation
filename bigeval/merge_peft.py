@@ -33,7 +33,7 @@ def merge_peft_and_save(model_dir, dtype, save_dir=None):
     os.makedirs(save_dir, exist_ok=True)
     logger.info(f"Saving the newly created merged model to {save_dir}")
 
-    tokenizer = AutoTokenizer.from_pretrained(base_model_dir)
+    tokenizer = AutoTokenizer.from_pretrained(base_model_dir, trust_remote_code=True)
     tokenizer.add_special_tokens({"pad_token": tokenizer.eos_token})
     tokenizer.save_pretrained(save_dir)
 
