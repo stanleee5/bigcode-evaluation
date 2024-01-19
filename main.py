@@ -175,13 +175,19 @@ async def main(args):
             )
 
             start_time = time.perf_counter()
-            metrics, logs = evaluate_task(task, generations)
+            metrics, logs, post_generations = evaluate_task(task, generations)
             elapsed = time.perf_counter() - start_time
 
             task_metrics[task_name] = metrics
             task_logs[task_name] = logs
+            task_post_generations[task_name] = post_generations
             logger.info(f"{metrics} - {elapsed = :.2f} sec.")
 
+            with open(args.post_generation_path, "w", encoding="utf-8") as f:
+                f.write(dict_to_str(task_post_generations))
+                logger.info(
+                    f">> post-processed generations saved at: {args.post_generation_path}"
+                )
             with open(args.metric_path, "w", encoding="utf-8") as f:
                 f.write(dict_to_str(task_metrics))
                 logger.info(f">> evaluation metrics saved at: {args.metric_path}")
