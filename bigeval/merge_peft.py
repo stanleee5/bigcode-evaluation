@@ -6,8 +6,8 @@ import os
 
 import torch
 from loguru import logger
-from peft import AutoPeftModelForCausalLM
-from transformers import AutoTokenizer
+from peft import AutoPeftModelForCausalLM, PeftConfig, PeftModel
+from transformers import AutoModelForCausalLM, AutoTokenizer
 
 
 def merge_peft_and_save(model_dir, dtype, save_dir=None):
@@ -16,17 +16,18 @@ def merge_peft_and_save(model_dir, dtype, save_dir=None):
         torch_dtype = torch.bfloat16
 
     logger.info("Loading the model it might take a while without feedback")
-    model = AutoPeftModelForCausalLM.from_pretrained(
-        model_dir,
-        revision=None,
-        torch_dtype=torch_dtype,
+
+    config = PeftConfig.from_pretrained(model_dir)
+    logger.info(config)
+    base_model_dir = config.base_model_name_or_path
+    base_model = AutoModelForCausalLM.from_pretrained(
+        base_model_dir,
         trust_remote_code=True,
-        low_cpu_mem_usage=True,
+        torch_dtype=torch_dtype,
     )
+    model = PeftModel.from_pretrained(base_model, model_dir)
+
     logger.info(f"Merging the PEFT weights.")
-
-    base_model_dir = model.peft_config["default"].base_model_name_or_path
-
     model = model.merge_and_unload()
 
     save_dir = model_dir if save_dir is None else save_dir
