@@ -1,6 +1,7 @@
 """
 LLM Code Evaluation
 """
+
 import argparse
 import asyncio
 import copy
@@ -46,7 +47,7 @@ def parse_args():
     parser.add_argument("-tp", "--tensor-parallel-size", default=1, type=int)
     parser.add_argument("--quantization", default=None)
     parser.add_argument("--gpu-memory-utilization", default=0.95, type=float)
-    parser.add_argument("--swap-space", default=16, type=int)
+    parser.add_argument("--swap-space", default=64, type=int)
     parser.add_argument("--model-cache", default="./merged_models")
 
     # Generation
@@ -76,18 +77,17 @@ def parse_args():
 
 def get_tasks(args) -> Dict[str, Task]:
     if args.template is not None:
-        assert not args.instruction_template and not args.response_template
         logger.info(f"Prompt template from {args.template = }")
         template_format = PROMPT_TEMPLATES[args.template]
 
         args.instruction_template = template_format["instruction"]
         args.response_template = template_format["response"]
-        logger.info(f"instruction: {args.instruction_template}")
-        logger.info(f"response: {args.response_template}")
+        logger.info(f"instruction-template: {args.instruction_template}")
+        logger.info(f"response-template: {args.response_template}")
 
     tasks = {}
     for task_name in args.tasks.split(","):
-        assert task_name in ALL_TASKS, f"TASKS: {list(ALL_TASKS.keys())}"
+        assert task_name in ALL_TASKS, f"{task_name} not in: {list(ALL_TASKS.keys())}"
 
         task_class: Task = ALL_TASKS[task_name]
         tasks[task_name] = task_class(
@@ -99,15 +99,17 @@ def get_tasks(args) -> Dict[str, Task]:
     return tasks
 
 
-def evaluate_task(task: Task, generations: List[List[str]]) -> Tuple[Dict, Dict]:
+def evaluate_task(
+    task: Task, generations: List[List[str]]
+) -> Tuple[Dict, Dict, List[List]]:
     """apply task postprocess, and then evaluate"""
     references = [task.get_reference(x) for x in task.get_dataset()]
-    generations = [
+    post_generations = [
         [task.postprocess_generation(g, i) for g in gs]
         for i, gs in enumerate(generations)
     ]
-    results, logs = task.process_results(generations, references)
-    return results, logs
+    results, logs = task.process_results(post_generations, references)
+    return results, logs, post_generations
 
 
 def dict_to_str(x) -> str:
@@ -124,11 +126,13 @@ async def main(args):
 
     args_dict = copy.deepcopy(vars(args))
     task_generations = {"config": args_dict}
+    task_post_generations = {"config": args_dict}
     task_metrics = {"config": args_dict}
     task_logs = {"config": args_dict}
 
     if args.save_dir:
         args.generation_path = os.path.join(args.save_dir, "generations.json")
+        args.post_generation_path = os.path.join(args.save_dir, "post-generations.json")
         args.metric_path = os.path.join(args.save_dir, "metrics.json")
         args.log_path = os.path.join(args.save_dir, "logs.json")
         os.makedirs(args.save_dir, exist_ok=True)
@@ -183,17 +187,18 @@ async def main(args):
             task_post_generations[task_name] = post_generations
             logger.info(f"{metrics} - {elapsed = :.2f} sec.")
 
-            with open(args.post_generation_path, "w", encoding="utf-8") as f:
-                f.write(dict_to_str(task_post_generations))
-                logger.info(
-                    f">> post-processed generations saved at: {args.post_generation_path}"
-                )
-            with open(args.metric_path, "w", encoding="utf-8") as f:
-                f.write(dict_to_str(task_metrics))
-                logger.info(f">> evaluation metrics saved at: {args.metric_path}")
-            with open(args.log_path, "w", encoding="utf-8") as f:
-                f.write(dict_to_str(task_logs))
-                logger.info(f">> evaluation logs saved at: {args.metric_path}")
+            if args.save_dir:
+                with open(args.post_generation_path, "w", encoding="utf-8") as f:
+                    f.write(dict_to_str(task_post_generations))
+                    logger.info(
+                        f">> post-processed generations saved at: {args.post_generation_path}"
+                    )
+                with open(args.metric_path, "w", encoding="utf-8") as f:
+                    f.write(dict_to_str(task_metrics))
+                    logger.info(f">> evaluation metrics saved at: {args.metric_path}")
+                with open(args.log_path, "w", encoding="utf-8") as f:
+                    f.write(dict_to_str(task_logs))
+                    logger.info(f">> evaluation logs saved at: {args.metric_path}")
 
     logger.info(dict_to_str(task_metrics))
 
