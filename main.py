@@ -15,7 +15,7 @@ import ray
 import torch
 from loguru import logger
 
-from bigeval.generator import VllmGenerator
+from bigeval.generator import HFGenerator, VllmGenerator
 from bigeval.prompt_template import PROMPT_TEMPLATES
 from bigeval.task import Task
 from bigeval.tasks import ALL_TASKS
@@ -51,6 +51,7 @@ def parse_args():
     parser.add_argument("--model-cache", default="./merged_models")
 
     # Generation
+    parser.add_argument("--batch-size", default=1, type=int)
     parser.add_argument("--do-sample", action="store_true")
     parser.add_argument("--temperature", default=0.2, type=float)
     parser.add_argument("--top-k", default=None, type=int)
@@ -145,7 +146,9 @@ async def main(args):
             logger.info(f">> loaded tasks: {list(task_generations.keys())}")
 
     if not args.evaluation_only:
-        if args.framework == "vllm":
+        if args.framework == "hf":
+            generator = HFGenerator(args)
+        elif args.framework == "vllm":
             generator = VllmGenerator(args)
         else:
             raise NotImplementedError(f"{args.framework}")

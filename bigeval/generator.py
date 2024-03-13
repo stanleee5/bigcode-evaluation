@@ -4,13 +4,23 @@ import shutil
 import uuid
 from abc import ABC, abstractmethod
 from typing import Dict, List
+from urllib.parse import urljoin
 
 import requests
+import torch
+import tqdm
+import transformers
 from loguru import logger
-from tqdm.asyncio import tqdm
+from transformers import AutoTokenizer
 
 from bigeval.merge_peft import merge_peft_and_save
 from bigeval.task import Task
+
+torch_dtypes = {
+    "bfloat16": torch.bfloat16,
+    "float16": torch.float16,
+    "float32": torch.float32,
+}
 
 
 class Generator(ABC):
@@ -26,6 +36,54 @@ class Generator(ABC):
 
     def close(self):
         logger.info(f"Close {self.__class__.__name__}")
+
+
+class HFGenerator(Generator):
+    def __init__(self, args):
+        self.args = args
+        self.tokenizer = AutoTokenizer.from_pretrained(
+            args.model, trust_remote_code=True
+        )
+        if self.tokenizer.pad_token is None:
+            self.tokenizer.add_special_tokens({"pad_token": self.tokenizer.eos_token})
+        self.pipeline = transformers.pipeline(
+            "text-generation",
+            model=args.model,
+            torch_dtype=torch_dtypes[args.dtype],
+            device_map="auto",
+            trust_remote_code=True,
+        )
+
+    async def generate_task(
+        self, task: Task, max_samples: int = None
+    ) -> List[List[str]]:
+        logger.info("start HF pipeline")
+
+        prompts: List[str] = [task.get_prompt(x) for x in task.get_dataset()]
+
+        do_sample = self.args.do_sample
+        bsz = self.args.batch_size
+
+        responses = []
+        for idx in tqdm.tqdm(range(0, len(prompts), bsz)):
+            b_responses = self.pipeline(
+                prompts[idx : idx + bsz],
+                num_return_sequences=self.args.n_samples,
+                do_sample=do_sample,
+                temperature=self.args.temperature if do_sample else None,
+                top_p=self.args.top_p if do_sample else None,
+                top_k=self.args.top_k if do_sample else None,
+                eos_token_id=self.tokenizer.eos_token_id,
+                max_new_tokens=self.args.max_tokens,
+                return_full_text=False,
+            )
+            responses.extend(b_responses)
+
+        generations: List[List[str]] = [
+            [prompts[i] + r["generated_text"] for r in response]
+            for i, response in enumerate(responses)
+        ]
+        return generations
 
 
 class VllmGenerator(Generator):
