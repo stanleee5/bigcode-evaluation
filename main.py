@@ -122,7 +122,7 @@ def dict_to_str(x) -> str:
     ).decode("utf-8")
 
 
-async def main(args):
+def main(args):
     tasks: Dict[str, Task] = get_tasks(args)
 
     args_dict = copy.deepcopy(vars(args))
@@ -156,7 +156,7 @@ async def main(args):
         for task_name, task in tasks.items():
             logger.info(f"Generation: {task_name = }")
             start_time = time.perf_counter()
-            generations: List[List[str]] = await generator.generate_task(
+            generations: List[List[str]] = generator.generate_task(
                 task, max_samples=args.max_samples
             )
             elapsed = time.perf_counter() - start_time
@@ -208,4 +208,4 @@ async def main(args):
 
 if __name__ == "__main__":
     args = parse_args()
-    asyncio.run(main(args))
+    main(args)

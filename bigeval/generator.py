@@ -1,10 +1,8 @@
-import asyncio
 import os
 import shutil
 import uuid
 from abc import ABC, abstractmethod
 from typing import Dict, List
-from urllib.parse import urljoin
 
 import requests
 import torch
@@ -25,14 +23,31 @@ torch_dtypes = {
 
 class Generator(ABC):
     @abstractmethod
-    async def generate_task(
-        self, task: Task, max_samples: int = None
-    ) -> List[List[str]]:
+    def inference(self, prompts: List[str]) -> List[List[str]]:
         """
-        Return full generation(given_prompt + response) for task.
-        Do not apply task post-processing here.
+        Inference list of prompts, return output only.
         """
         pass
+
+    def generate_task(self, task: Task, max_samples: int = None) -> List[List[str]]:
+        """
+        Return full generation(input_prompt + response) for task.
+        Do not apply task post-processing here.
+        """
+        prompts: List[str] = [task.get_prompt(x) for x in task.get_dataset()]
+        if max_samples:
+            logger.warning(f"Use prompt subset, size: {max_samples}")
+            prompts = prompts[:max_samples]
+
+        # Run inference
+        outputs_list: List[List[str]] = self.inference(prompts)
+
+        # Add prompt to outputs
+        generations: List[List[str]] = [
+            [prompts[i] + output for output in outputs]
+            for i, outputs in enumerate(outputs_list)
+        ]
+        return generations
 
     def close(self):
         logger.info(f"Close {self.__class__.__name__}")
@@ -54,13 +69,7 @@ class HFGenerator(Generator):
             trust_remote_code=True,
         )
 
-    async def generate_task(
-        self, task: Task, max_samples: int = None
-    ) -> List[List[str]]:
-        logger.info("start HF pipeline")
-
-        prompts: List[str] = [task.get_prompt(x) for x in task.get_dataset()]
-
+    def inference(self, prompts: List[str]) -> List[List[str]]:
         do_sample = self.args.do_sample
         bsz = self.args.batch_size
 
@@ -78,10 +87,8 @@ class HFGenerator(Generator):
                 return_full_text=False,
             )
             responses.extend(b_responses)
-
-        generations: List[List[str]] = [
-            [prompts[i] + r["generated_text"] for r in response]
-            for i, response in enumerate(responses)
+        generations = [
+            [r["generated_text"] for r in response] for response in responses
         ]
         return generations
 
@@ -114,25 +121,15 @@ class VllmGenerator(Generator):
             n=args.n_samples,
             max_tokens=args.max_tokens,
         )
-        logger.info(f"Generator Initialized")
+        logger.info(f"vllm Generator Initialized")
 
-    async def generate_task(
-        self, task: Task, max_samples: int = None
-    ) -> List[List[str]]:
-        prompts: List[str] = [task.get_prompt(x) for x in task.get_dataset()]
-        if max_samples:
-            logger.warning(f"use small samples: {max_samples}")
-            prompts = prompts[:max_samples]
-
-        # List[vllm.outputs.RequestOutput]
+    def inference(self, prompts: List[str]) -> List[List[str]]:
         req_outputs = self.llm.generate(prompts, self.sampling_params)
-        generations: List[List[str]] = [
-            [prompts[i] + o.text for o in output.outputs]
-            for i, output in enumerate(req_outputs)
-        ]
+        generations = [[o.text for o in output.outputs] for output in req_outputs]
         return generations
 
     def close(self):
         if self.model_cache_dir:
             logger.info(f"Remove the PEFT-merged cache: {self.model_cache_dir}")
             shutil.rmtree(self.model_cache_dir)
+        super().close()
