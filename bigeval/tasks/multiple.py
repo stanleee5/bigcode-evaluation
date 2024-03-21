@@ -21,9 +21,9 @@ import numpy as np
 from datasets import load_dataset
 from tqdm import tqdm
 
-from bigeval.metrics.multiple.evaluation import evaluate_problem
-from bigeval.metrics.multiple.single_experiment_pass_k import for_file
-from bigeval.task import Task
+from ..metrics.multiple.evaluation import evaluate_problem
+from ..metrics.multiple.single_experiment_pass_k import for_file
+from ..task import Task
 
 _CITATION = """
 @article{cassano2022scalable,

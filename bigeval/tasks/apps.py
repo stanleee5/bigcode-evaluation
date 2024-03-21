@@ -12,7 +12,7 @@ from functools import partial
 
 from evaluate import load
 
-from bigeval.task import Task
+from ..task import Task
 
 _CITATION = """
 @article{hendrycksapps2021,

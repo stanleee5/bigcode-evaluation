@@ -4,7 +4,7 @@ from functools import partial
 
 import evaluate
 
-from bigeval.task import Task
+from ..task import Task
 
 _CITATION = """
 @article{muennighoff2023octopack,

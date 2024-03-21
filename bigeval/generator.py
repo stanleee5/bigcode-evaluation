@@ -13,8 +13,8 @@ import transformers
 from loguru import logger
 from transformers import AutoTokenizer
 
-from bigeval.merge_peft import merge_peft_and_save
-from bigeval.task import Task
+from .merge_peft import merge_peft_and_save
+from .task import Task
 
 torch_dtypes = {
     "bfloat16": torch.bfloat16,

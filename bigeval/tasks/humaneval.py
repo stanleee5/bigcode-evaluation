@@ -7,10 +7,11 @@ They were handwritten to ensure not to be included in the training set of code g
 
 Homepage: https://github.com/openai/human-eval
 """
+
 from typing import Dict, List, Tuple
 
-from bigeval.metrics.code_eval import compute_code_eval
-from bigeval.task import Task
+from ..metrics.code_eval import compute_code_eval
+from ..task import Task
 
 _CITATION = """
 @misc{chen2021evaluating,
