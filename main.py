@@ -3,10 +3,8 @@ LLM Code Evaluation
 """
 
 import argparse
-import asyncio
 import copy
 import os
-import shutil
 import time
 from typing import Dict, List, Tuple
 
@@ -39,10 +37,12 @@ def parse_args():
     parser.add_argument("--load-saved", action="store_true")
     parser.add_argument("--max-samples", type=int, default=None, help="for debugging")
 
-    # LLM
-    parser.add_argument("-f", "--framework", type=str, default="vllm")
+    # LLM-framework
+    parser.add_argument("-f", "--framework", choices=["hf", "vllm"])
     parser.add_argument("-m", "--model")
     parser.add_argument("-a", "--adapter")
+    parser.add_argument("--max-model-len", type=int, default=None)
+    parser.add_argument("--endpoint", help="Inference endpoint, URL:PORT")
     parser.add_argument("--dtype", default="float16")
     parser.add_argument("-tp", "--tensor-parallel-size", default=1, type=int)
     parser.add_argument("--quantization", default=None)
@@ -54,7 +54,7 @@ def parse_args():
     parser.add_argument("--batch-size", default=1, type=int)
     parser.add_argument("--do-sample", action="store_true")
     parser.add_argument("--temperature", default=0.2, type=float)
-    parser.add_argument("--top-k", default=None, type=int)
+    parser.add_argument("--top-k", default=100, type=int)
     parser.add_argument("--top-p", default=0.95, type=float)
     parser.add_argument("--n-samples", default=1, type=int)
     parser.add_argument("--max-tokens", default=512, type=int)
@@ -67,7 +67,7 @@ def parse_args():
     parser.add_argument("--num-workers", default=4, type=int)
 
     args = parser.parse_args()
-    assert args.model or args.adapter
+    assert args.model or args.adapter or args.endpoint
 
     for k, v in vars(args).items():
         v_str = f"'{v}'" if isinstance(v, str) else str(v)
