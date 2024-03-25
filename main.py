@@ -43,10 +43,11 @@ def parse_args():
     parser.add_argument("-a", "--adapter")
     parser.add_argument("--max-model-len", type=int, default=None)
     parser.add_argument("--endpoint", help="Inference endpoint, URL:PORT")
+    # LLM-params
     parser.add_argument("--dtype", default="float16")
     parser.add_argument("-tp", "--tensor-parallel-size", default=1, type=int)
     parser.add_argument("--quantization", default=None)
-    parser.add_argument("--gpu-memory-utilization", default=0.95, type=float)
+    parser.add_argument("--gpu-memory-utilization", default=0.9, type=float)
     parser.add_argument("--swap-space", default=64, type=int)
     parser.add_argument("--model-cache", default="./merged_models")
 
@@ -69,6 +70,13 @@ def parse_args():
     args = parser.parse_args()
     assert args.model or args.adapter or args.endpoint
 
+    if args.save_dir:
+        args.generation_path = os.path.join(args.save_dir, "generations.json")
+        args.post_generation_path = os.path.join(args.save_dir, "post-generations.json")
+        args.metric_path = os.path.join(args.save_dir, "metrics.json")
+        args.log_path = os.path.join(args.save_dir, "logs.json")
+        os.makedirs(args.save_dir, exist_ok=True)
+
     for k, v in vars(args).items():
         v_str = f"'{v}'" if isinstance(v, str) else str(v)
         logger.info(f"{k} = {v_str}")
@@ -78,13 +86,13 @@ def parse_args():
 
 def get_tasks(args) -> Dict[str, Task]:
     if args.template is not None:
-        logger.info(f"Prompt template from {args.template = }")
+        logger.info(f"Modify prompt template from {args.template = }")
         template_format = PROMPT_TEMPLATES[args.template]
 
         args.instruction_template = template_format["instruction"]
         args.response_template = template_format["response"]
-        logger.info(f"instruction-template: {args.instruction_template}")
-        logger.info(f"response-template: {args.response_template}")
+        logger.info(f">> instruction-template: {args.instruction_template}")
+        logger.info(f">> response-template: {args.response_template}")
 
     tasks = {}
     for task_name in args.tasks.split(","):
@@ -130,13 +138,6 @@ def main(args):
     task_post_generations = {"config": args_dict}
     task_metrics = {"config": args_dict}
     task_logs = {"config": args_dict}
-
-    if args.save_dir:
-        args.generation_path = os.path.join(args.save_dir, "generations.json")
-        args.post_generation_path = os.path.join(args.save_dir, "post-generations.json")
-        args.metric_path = os.path.join(args.save_dir, "metrics.json")
-        args.log_path = os.path.join(args.save_dir, "logs.json")
-        os.makedirs(args.save_dir, exist_ok=True)
 
     # Load from saved-path if already exists
     if args.load_saved or args.evaluation_only:

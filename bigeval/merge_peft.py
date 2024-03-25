@@ -1,6 +1,7 @@
 """
 Merge the PEFT model and save.
 """
+
 import argparse
 import os
 
@@ -24,6 +25,7 @@ def merge_peft_and_save(model_dir, dtype, save_dir=None):
         base_model_dir,
         trust_remote_code=True,
         torch_dtype=torch_dtype,
+        # device_map="cuda",
     )
     model = PeftModel.from_pretrained(base_model, model_dir)
 
@@ -49,4 +51,4 @@ if __name__ == "__main__":
     parser.add_argument("--save-dir", default=None)
     args = parser.parse_args()
 
-    download_and_unload_peft(args.model, args.dtype, args.save_dir)
+    merge_peft_and_save(args.model, args.dtype, args.save_dir)
